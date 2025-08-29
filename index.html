@@ -277,7 +277,7 @@
                 document.getElementById('monthly-tryons').textContent = countError ? 'Error' : count;
             }
 
-            // --- Billing Logic (FINAL VERSION) ---
+            // --- Billing Logic (FINAL, MOST ROBUST VERSION) ---
             async function handleUpgradeClick(event) {
                 const priceId = event.target.dataset.priceId;
                 const button = event.target;
@@ -286,33 +286,33 @@
                 button.disabled = true;
 
                 try {
-                    // This is the definitive fix:
-                    // Manually get the session to ensure the auth token is fresh and available.
                     const { data: { session }, error: sessionError } = await dbClient.auth.getSession();
-
                     if (sessionError || !session) {
-                        throw new Error('Authentication error: Could not get user session. Please log out and log back in.');
+                        throw new Error('Authentication error. Please log out and log back in.');
                     }
                     
-                    console.log("Found session, invoking function...");
-
-                    // Explicitly set the Authorization header for the function call.
-                    dbClient.functions.setAuth(session.access_token);
-                    const { data, error } = await dbClient.functions.invoke('create-checkout-session', {
-                        body: { priceId },
+                    const functionUrl = `${SUPABASE_URL}/functions/v1/create-checkout-session`;
+                    const response = await fetch(functionUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`
+                        },
+                        body: JSON.stringify({ priceId: priceId })
                     });
-
-                    if (error) {
-                         const functionError = await error.context.json();
-                         throw new Error(functionError.error || error.message);
-                    }
                     
-                    if (data && data.url) {
-                        window.location.href = data.url;
-                    } else {
-                        const errorMessage = data ? JSON.stringify(data) : 'No redirect URL found.';
-                        throw new Error(`Invalid response from server: ${errorMessage}`);
+                    const responseData = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(responseData.error || 'Failed to create checkout session.');
                     }
+
+                    if (responseData.url) {
+                        window.location.href = responseData.url;
+                    } else {
+                        throw new Error('No redirect URL received from server.');
+                    }
+
                 } catch (error) {
                     console.error('Upgrade failed:', error);
                     billingError.textContent = error.message;
