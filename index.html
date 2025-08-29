@@ -277,7 +277,7 @@
                 document.getElementById('monthly-tryons').textContent = countError ? 'Error' : count;
             }
 
-            // --- Billing Logic (DEFINITIVE FIX) ---
+            // --- Billing Logic (DEFINITIVE FIX with Diagnostic Logging) ---
             async function handleUpgradeClick(event) {
                 const priceId = event.target.dataset.priceId;
                 const button = event.target;
@@ -291,22 +291,30 @@
                         throw new Error('Authentication error. Please log out and log back in.');
                     }
                     
+                    // --- DIAGNOSTIC LOGS ---
+                    console.log("SESSION OBJECT:", session);
+                    console.log("ACCESS TOKEN:", session.access_token);
+                    
                     const functionUrl = `${SUPABASE_URL}/functions/v1/create-checkout-session`;
                     
-                    // Use a standard fetch call and manually include both required headers.
+                    const headersToSend = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'apiKey': SUPABASE_ANON_KEY 
+                    };
+
+                    console.log("SENDING HEADERS:", headersToSend);
+
                     const response = await fetch(functionUrl, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${session.access_token}`,
-                            'apiKey': SUPABASE_ANON_KEY 
-                        },
+                        headers: headersToSend,
                         body: JSON.stringify({ priceId: priceId })
                     });
                     
                     const responseData = await response.json();
 
                     if (!response.ok) {
+                        console.error("RAW ERROR RESPONSE:", responseData);
                         throw new Error(responseData.error || 'Failed to create checkout session.');
                     }
 
@@ -349,4 +357,3 @@
     </script>
 </body>
 </html>
-
