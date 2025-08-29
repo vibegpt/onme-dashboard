@@ -1,4 +1,4 @@
-
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -164,7 +164,7 @@
     <script type="module">
         // --- IMPORTANT: Replace with your Supabase project details ---
         const SUPABASE_URL = 'https://dhubrstfaothjnsdxwmo.supabase.co'; // Your Supabase URL
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIJWTJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodWJyc3RmYW90aGpuc2R4d21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NTk5NjUsImV4cCI6MjA3MjAzNTk2NX0.46PoeHfIDixWgtWWr0xV33ItXnYNemcXyH_iFPBNEj8'; // Your Supabase Anon Key
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodWJyc3RmYW90aGpuc2R4d21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NTk5NjUsImV4cCI6MjA3MjAzNTk2NX0.46PoeHfIDixWgtWWr0xV33ItXnYNemcXyH_iFPBNEj8'; // PASTE YOUR SUPABASE ANON KEY HERE
 
         const appContainer = document.getElementById('app-container');
 
@@ -254,11 +254,16 @@
 
                 // Update billing buttons based on current plan
                 document.querySelectorAll('.upgrade-button').forEach(button => {
-                    const buttonPlan = button.dataset.priceId.includes('Core') ? 'Core' : 'Vibe'; // This is a simplification. Use actual Price IDs.
-                    if (plan.toLowerCase() === buttonPlan.toLowerCase()) {
+                    const buttonPriceId = button.dataset.priceId;
+                    // You'll need to know which price ID corresponds to which plan.
+                    // This is a simplified example.
+                    const isCoreButton = buttonPriceId === 'price_1PuaTTRs1d9g4j5k9f9f9f9f';
+                    const isVibeButton = buttonPriceId === 'price_1PuaUuRs1d9g4j5k9f9f9f9f';
+
+                    if ((plan.toLowerCase() === 'core' && isCoreButton) || (plan.toLowerCase() === 'vibe' && isVibeButton)) {
                         button.textContent = 'Current Plan';
                         button.disabled = true;
-                        button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                        button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700', 'bg-gray-600', 'hover:bg-gray-700');
                         button.classList.add('bg-gray-400', 'cursor-not-allowed');
                     }
                 });
@@ -324,3 +329,4 @@
     </script>
 </body>
 </html>
+
