@@ -277,7 +277,7 @@
                 document.getElementById('monthly-tryons').textContent = countError ? 'Error' : count;
             }
 
-            // --- Billing Logic ---
+            // --- Billing Logic (FINAL VERSION) ---
             async function handleUpgradeClick(event) {
                 const priceId = event.target.dataset.priceId;
                 const button = event.target;
@@ -286,17 +286,19 @@
                 button.disabled = true;
 
                 try {
-                    // This is the final, definitive fix.
-                    // Manually get the session to ensure the auth token is fresh.
+                    // This is the definitive fix:
+                    // Manually get the session to ensure the auth token is fresh and available.
                     const { data: { session }, error: sessionError } = await dbClient.auth.getSession();
+
                     if (sessionError || !session) {
                         throw new Error('Authentication error: Could not get user session. Please log out and log back in.');
                     }
                     
+                    console.log("Found session, invoking function...");
+
+                    // Explicitly set the Authorization header for the function call.
+                    dbClient.functions.setAuth(session.access_token);
                     const { data, error } = await dbClient.functions.invoke('create-checkout-session', {
-                        headers: {
-                            'Authorization': `Bearer ${session.access_token}`
-                        },
                         body: { priceId },
                     });
 
