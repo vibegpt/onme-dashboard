@@ -286,17 +286,26 @@
                 button.disabled = true;
 
                 try {
-                    // This is the updated, more robust way to call the function
+                    // This is the final, robust way to call the function
                     const { data, error } = await dbClient.functions.invoke('create-checkout-session', {
                         body: { priceId },
                     });
 
-                    if (error) { throw new Error(`Function Error: ${error.message}`); }
-                    if (data && data.error) { throw new Error(`Backend Error: ${data.error}`); }
+                    if (error) {
+                        // Check for a more specific error message from the function's response
+                        if (error.context && error.context.json) {
+                           const functionError = await error.context.json();
+                           throw new Error(functionError.error || error.message);
+                        }
+                        throw new Error(`Function Error: ${error.message}`);
+                    }
+
                     if (data && data.url) {
                         window.location.href = data.url;
                     } else {
-                        throw new Error('Invalid response from server. No redirect URL found.');
+                        // Handle cases where the function returns data but it's not what we expect
+                        const errorMessage = data ? JSON.stringify(data) : 'No redirect URL found.';
+                        throw new Error(`Invalid response from server: ${errorMessage}`);
                     }
                 } catch (error) {
                     console.error('Upgrade failed:', error);
@@ -305,6 +314,7 @@
                     button.disabled = false;
                 }
             }
+
 
             // --- Main App Logic ---
             dbClient.auth.onAuthStateChange((event, session) => {
