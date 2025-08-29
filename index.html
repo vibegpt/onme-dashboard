@@ -286,17 +286,8 @@
                 button.disabled = true;
 
                 try {
-                    // --- THIS IS THE CRITICAL FIX ---
-                    // Explicitly get the user's session token to ensure authentication.
-                    const { data: { session }, error: sessionError } = await dbClient.auth.getSession();
-                    if (sessionError || !session) {
-                        throw new Error('Authentication error: Could not get user session.');
-                    }
-                    
+                    // This is the updated, more robust way to call the function
                     const { data, error } = await dbClient.functions.invoke('create-checkout-session', {
-                        headers: {
-                            'Authorization': `Bearer ${session.access_token}`
-                        },
                         body: { priceId },
                     });
 
