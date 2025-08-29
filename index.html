@@ -210,15 +210,22 @@
                 const email = document.getElementById('signup-email').value;
                 const password = document.getElementById('signup-password').value;
                 signupError.textContent = '';
+                
+                // The sign-up process is now simpler. We just create the user.
+                // The database trigger will automatically create their profile row.
                 const { data, error } = await dbClient.auth.signUp({ email, password });
+
                 if (error) {
                     signupError.textContent = error.message;
                 } else if (data.user) {
-                    const { error: profileError } = await dbClient
+                    // We still need to update the company name, since the trigger only adds the ID.
+                    const { error: updateError } = await dbClient
                         .from('clients')
-                        .insert([{ id: data.user.id, company_name: company }]);
-                    if (profileError) {
-                         signupError.textContent = `Account created, but failed to create profile: ${profileError.message}`;
+                        .update({ company_name: company })
+                        .eq('id', data.user.id);
+
+                    if (updateError) {
+                        signupError.textContent = `Account created, but failed to set company name: ${updateError.message}`;
                     } else {
                         alert('Sign up successful! Please check your email for a confirmation link.');
                         showView('login-view');
@@ -239,7 +246,7 @@
                 await dbClient.auth.signOut();
             }
 
-            async function loadDashboardData(userId, userPlan) {
+            async function loadDashboardData(userId) {
                  const { data, error } = await dbClient
                     .from('clients')
                     .select('client_id, plan')
@@ -255,10 +262,8 @@
                 // Update billing buttons based on current plan
                 document.querySelectorAll('.upgrade-button').forEach(button => {
                     const buttonPriceId = button.dataset.priceId;
-                    // You'll need to know which price ID corresponds to which plan.
-                    // This is a simplified example.
-                    const isCoreButton = buttonPriceId === 'price_1PuaTTRs1d9g4j5k9f9f9f9f';
-                    const isVibeButton = buttonPriceId === 'price_1PuaUuRs1d9g4j5k9f9f9f9f';
+                    const isCoreButton = buttonPriceId === 'price_1PuaTTRs1d9g4j5k9f9f9f9f'; // Replace with your Core Price ID
+                    const isVibeButton = buttonPriceId === 'price_1PuaUuRs1d9g4j5k9f9f9f9f'; // Replace with your Vibe Price ID
 
                     if ((plan.toLowerCase() === 'core' && isCoreButton) || (plan.toLowerCase() === 'vibe' && isVibeButton)) {
                         button.textContent = 'Current Plan';
@@ -329,4 +334,3 @@
     </script>
 </body>
 </html>
-
