@@ -1,382 +1,326 @@
-(function() {
-    // This function runs when the script is loaded.
 
-    // --- Configuration ---
-    const WIDGET_ROOT_ID = 'onme-widget-root';
-    const PRODUCT_IMAGE_ID = 'product-image-for-tryon';
-    const SESSION_STORAGE_KEY = 'onme-user-selfie';
-    const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent';
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OnMe Client Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50">
 
-    // --- IMPORTANT: These need to be configured for the widget to log analytics ---
-    const SUPABASE_URL = 'https://dhubrstfaothjnsdxwmo.supabase.co'; // Your Supabase URL
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodWJyc3RmYW90aGpuc2R4d21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NTk5NjUsImV4cCI6MjA3MjAzNTk2NX0.46PoeHfIDixWgtWWr0xV33ItXnYNemcXyH_iFPBNEj8'; // Your Supabase Anon Key
-    let dbClient = null;
+    <!-- This div will contain the entire application -->
+    <div id="app-container">
 
-
-    // --- Asset URLs ---
-    const SCENES = [
-        'https://images.pexels.com/photos/1638324/pexels-photo-1638324.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-        'https://images.pexels.com/photos/3769138/pexels-photo-3769138.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-        'https://images.pexels.com/photos/21014/pexels-photo.jpg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-        'https://images.pexels.com/photos/247929/pexels-photo-247929.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-        'https://images.pexels.com/photos/931007/pexels-photo-931007.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'
-    ];
-    const STICKERS = [
-        'https://www.svgrepo.com/show/509939/sparkle.svg',
-        'https://www.svgrepo.com/show/521692/flower.svg',
-        'https://www.svgrepo.com/show/530438/camera.svg',
-        'https://www.svgrepo.com/show/508930/fire.svg',
-        'https://www.svgrepo.com/show/493540/heart-love.svg',
-        'https://www.svgrepo.com/show/521876/planet.svg'
-    ];
-
-    // --- Helper function to find the client's unique ID ---
-    function getClientId() {
-        const scriptTag = document.querySelector('script[src*="widget.js"]');
-        return scriptTag ? scriptTag.getAttribute('data-client-id') : null;
-    }
-    
-    // --- Analytics Logging ---
-    async function logTryOnEvent() {
-        const clientId = getClientId();
-        if (!clientId || !dbClient) return;
-
-        try {
-            const { error } = await dbClient.from('try_on_events').insert([{ client_id: clientId }]);
-            if (error) {
-                console.error('OnMe Analytics Error:', error.message);
-            } else {
-                console.log('OnMe event logged successfully.');
-            }
-        } catch (e) {
-            console.error('OnMe Analytics Exception:', e.message);
-        }
-    }
-
-
-    // --- 1. Inject CSS Styles ---
-    function injectCSS() {
-        const styles = `
-            :root { --onme-primary: #4f46e5; }
-            #onme-widget-container {
-                max-width: 400px; margin: 2em auto; border: 1px solid #e2e8f0; border-radius: 1rem;
-                font-family: 'Inter', sans-serif;
-                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-                padding: 1.5rem; background-color: #ffffff;
-            }
-            #onme-widget-container .spinner { border-top-color: var(--onme-primary); animation: onme-spin 1s linear infinite; }
-            @keyframes onme-spin { to { transform: rotate(360deg); } }
-            #onme-vibe-studio-modal {
-                position: fixed; inset: 0; z-index: 50; display: none;
-                align-items: center; justify-content: center; padding: 1rem;
-                background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-            }
-            #onme-vibe-studio-modal.flex { display: flex; }
-            #onme-vibe-studio-modal .vibe-tab.active { border-color: var(--onme-primary); color: var(--onme-primary); }
-            .onme-frame-polaroid { border: 15px solid white; border-bottom-width: 60px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); filter: sepia(0.2) saturate(1.2); }
-            .onme-frame-neon { border: 5px solid #f0f; box-shadow: 0 0 10px #f0f, 0 0 20px #f0f; }
-            .onme-frame-film { border: 20px solid #000; border-image: repeating-linear-gradient(0deg, #000, #000 10px, #fff 10px, #fff 12px, #000 12px, #000 20px) 20; filter: grayscale(0.5) contrast(1.1); }
-            .onme-sticker { position: absolute; cursor: move; user-select: none; width: 60px; height: auto; transition: transform 0.1s; }
-            .onme-sticker.dragging { transform: scale(1.1); box-shadow: 0 0 15px rgba(0,0,0,0.3); }
-        `;
-        const styleSheet = document.createElement("style");
-        styleSheet.type = "text/css";
-        styleSheet.innerText = styles;
-        document.head.appendChild(styleSheet);
-
-        const fontLink = document.createElement('link');
-        fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
-        fontLink.rel = "stylesheet";
-        document.head.appendChild(fontLink);
-    }
-
-    // --- 2. Create Widget HTML ---
-    function createWidgetHTML(rootElement) {
-        rootElement.innerHTML = `
-            <h3 class="text-xl font-bold text-center text-gray-800 mb-1">Virtual Try-On</h3>
-            <p class="text-sm text-gray-500 text-center mb-4">Upload your photo to see how this looks on you!</p>
-            <div class="text-center mb-4">
-                <img id="onme-person-preview" src="https://placehold.co/300x400/EFEFEF/333333?text=Your+Photo" alt="User photo preview" class="w-full max-w-[200px] mx-auto aspect-[3/4] object-cover rounded-lg bg-gray-100 shadow-inner">
-                <label for="onme-person-upload" id="onme-upload-label" class="cursor-pointer text-sm font-semibold text-indigo-600 hover:text-indigo-800 mt-2 inline-block">Upload Your Photo</label>
-                <input type="file" id="onme-person-upload" class="hidden" accept="image/*">
-            </div>
-            <div class="flex flex-col items-center">
-                <button id="onme-generate-button" class="w-full text-center bg-indigo-600 text-white font-semibold py-2.5 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:bg-indigo-300" disabled>Generate Try-On</button>
-                <div id="onme-loading-spinner" class="spinner w-8 h-8 rounded-full border-4 border-gray-300 hidden my-2"></div>
-                <button id="onme-vibe-studio-button" class="w-full text-center bg-gray-700 text-white font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-800 transition-colors shadow-sm hidden mt-2">Customize Your Vibe</button>
-                <p id="onme-message" class="text-xs text-gray-500 mt-2 h-auto text-center"></p>
-            </div>
-        `;
-        
-        const modalHTML = `
-            <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-full overflow-y-auto">
-                <div class="flex justify-between items-center mb-4"><h2 class="text-2xl font-bold">Vibe Studio</h2><button id="onme-modal-close-button" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button></div>
-                <div id="onme-modal-result-container" class="relative w-full max-w-sm mx-auto aspect-[3/4] bg-gray-200 rounded-xl overflow-hidden shadow-inner flex items-center justify-center bg-cover bg-center">
-                    <img id="onme-modal-result-image" alt="Generated image" class="absolute inset-0 w-full h-full object-contain">
-                    <div id="onme-modal-sticker-container" class="absolute inset-0 w-full h-full"></div>
+        <!-- LOGIN VIEW (Default) -->
+        <div id="login-view">
+            <div class="min-h-screen flex items-center justify-center">
+                <div class="max-w-md w-full bg-white p-8 rounded-xl shadow-md">
+                    <h2 class="text-3xl font-bold text-center text-gray-800 mb-2">Welcome to OnMe</h2>
+                    <p class="text-center text-gray-500 mb-8">Sign in to your account</p>
+                    <form id="login-form">
+                        <div class="mb-4">
+                            <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" id="login-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div class="mb-6">
+                            <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" id="login-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 transition-colors">Sign In</button>
+                    </form>
+                    <p id="login-error" class="text-red-500 text-sm text-center mt-4"></p>
+                    <p class="text-sm text-center text-gray-600 mt-6">
+                        Don't have an account? <a href="#" id="show-signup" class="font-medium text-indigo-600 hover:text-indigo-500">Sign up</a>
+                    </p>
                 </div>
-                <div class="flex justify-center border-b my-4">
-                    <button data-tab="scenes" class="vibe-tab active flex-1 py-2 font-semibold border-b-2">Scenes</button>
-                    <button data-tab="stickers" class="vibe-tab flex-1 py-2 font-semibold border-b-2 border-transparent">Stickers</button>
-                    <button data-tab="frames" class="vibe-tab flex-1 py-2 font-semibold border-b-2 border-transparent">Frames</button>
-                </div>
-                <div id="onme-scenes-panel" class="vibe-panel grid grid-cols-5 gap-2"></div>
-                <div id="onme-stickers-panel" class="vibe-panel hidden grid grid-cols-6 gap-2"></div>
-                <div id="onme-frames-panel" class="vibe-panel hidden grid grid-cols-5 gap-2"></div>
-                <div class="text-center mt-6"><button id="onme-modal-download-button" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-full hover:bg-indigo-700 text-lg shadow-lg">Download</button></div>
             </div>
-        `;
-        const modal = document.createElement('div');
-        modal.id = 'onme-vibe-studio-modal';
-        modal.innerHTML = modalHTML;
-        document.body.appendChild(modal);
-    }
+        </div>
 
-    // --- 3. Widget Logic ---
-    function initializeWidget() {
-        const rootElement = document.getElementById(WIDGET_ROOT_ID);
-        if (!rootElement) { return; }
+        <!-- SIGNUP VIEW -->
+        <div id="signup-view" class="hidden">
+            <div class="min-h-screen flex items-center justify-center">
+                <div class="max-w-md w-full bg-white p-8 rounded-xl shadow-md">
+                    <h2 class="text-3xl font-bold text-center text-gray-800 mb-2">Create Your OnMe Account</h2>
+                    <p class="text-center text-gray-500 mb-8">Get started with your virtual try-on widget</p>
+                    <form id="signup-form">
+                        <div class="mb-4">
+                            <label for="signup-company" class="block text-sm font-medium text-gray-700">Company Name</label>
+                            <input type="text" id="signup-company" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div class="mb-4">
+                            <label for="signup-email" class="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" id="signup-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div class="mb-6">
+                            <label for="signup-password" class="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" id="signup-password" required minlength="6" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 transition-colors">Create Account</button>
+                    </form>
+                    <p id="signup-error" class="text-red-500 text-sm text-center mt-4"></p>
+                     <p class="text-sm text-center text-gray-600 mt-6">
+                        Already have an account? <a href="#" id="show-login" class="font-medium text-indigo-600 hover:text-indigo-500">Sign in</a>
+                    </p>
+                </div>
+            </div>
+        </div>
 
-        const tailwindScript = document.createElement('script');
-        tailwindScript.src = "https://cdn.tailwindcss.com";
-        document.head.appendChild(tailwindScript);
-        
-        const html2canvasScript = document.createElement('script');
-        html2canvasScript.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-        document.head.appendChild(html2canvasScript);
-        
-        const supabaseScript = document.createElement('script');
-        supabaseScript.src = "https://unpkg.com/@supabase/supabase-js@2";
-        supabaseScript.onload = () => {
-            if (supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
-                dbClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                console.log('OnMe Supabase client initialized.');
-            }
-        };
-        document.head.appendChild(supabaseScript);
+        <!-- DASHBOARD VIEW (Authenticated) -->
+        <div id="dashboard-view" class="hidden">
+            <nav class="bg-white shadow-sm">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between h-16">
+                        <div class="flex">
+                            <div class="flex-shrink-0 flex items-center text-2xl font-bold text-indigo-600">OnMe</div>
+                        </div>
+                        <div class="flex items-center">
+                             <span id="user-email" class="text-sm text-gray-600 mr-4"></span>
+                            <button id="logout-button" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-md hover:bg-gray-300 text-sm transition-colors">Sign Out</button>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+            <div class="py-10">
+                <header class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <h1 class="text-3xl font-bold leading-tight text-gray-900">Dashboard</h1>
+                </header>
+                <main>
+                    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 mt-8">
+                        <!-- Integration Section -->
+                        <div class="bg-white p-8 rounded-xl shadow-md mb-8">
+                            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Integration</h2>
+                            <p class="text-gray-600 mb-6">To add the OnMe widget to your website, place the following two snippets of code into your HTML.</p>
+                            
+                            <h3 class="font-semibold text-gray-700 mb-2">1. Add this script tag before your closing `&lt;/body&gt;` tag:</h3>
+                            <pre class="bg-gray-100 p-4 rounded-lg text-sm text-gray-800 overflow-x-auto"><code id="widget-script-tag"></code></pre>
+                            
+                            <h3 class="font-semibold text-gray-700 mt-6 mb-2">2. Add this div where you want the widget to appear on your product page:</h3>
+                            <pre class="bg-gray-100 p-4 rounded-lg text-sm text-gray-800"><code>&lt;div id="onme-widget-root"&gt;&lt;/div&gt;</code></pre>
+                        </div>
 
-        rootElement.className = "onme-widget-container";
-        
-        injectCSS();
-        createWidgetHTML(rootElement);
+                        <!-- Analytics Section -->
+                        <div class="bg-white p-8 rounded-xl shadow-md mb-8">
+                            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Analytics</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div class="bg-indigo-50 p-6 rounded-lg">
+                                    <h4 class="text-sm font-medium text-indigo-800">Monthly Try-Ons</h4>
+                                    <p id="monthly-tryons" class="text-4xl font-bold text-indigo-600 mt-2">Loading...</p>
+                                </div>
+                                <div class="bg-green-50 p-6 rounded-lg">
+                                    <h4 class="text-sm font-medium text-green-800">Your Current Plan</h4>
+                                    <p id="current-plan" class="text-4xl font-bold text-green-600 mt-2">Loading...</p>
+                                </div>
+                                <div class="bg-gray-100 p-6 rounded-lg">
+                                    <h4 class="text-sm font-medium text-gray-800">Client ID</h4>
+                                    <p id="client-id-display" class="text-2xl font-mono text-gray-600 mt-3 break-all">Loading...</p>
+                                </div>
+                            </div>
+                        </div>
 
-        // --- Element References ---
-        const personUpload = document.getElementById('onme-person-upload');
-        const personPreview = document.getElementById('onme-person-preview');
-        const uploadLabel = document.getElementById('onme-upload-label');
-        const generateButton = document.getElementById('onme-generate-button');
-        const loadingSpinner = document.getElementById('onme-loading-spinner');
-        const messageEl = document.getElementById('onme-message');
-        const vibeStudioButton = document.getElementById('onme-vibe-studio-button');
-        const modal = document.getElementById('onme-vibe-studio-modal');
-        const closeModalButton = document.getElementById('onme-modal-close-button');
-        const modalResultImage = document.getElementById('onme-modal-result-image');
-        const modalResultContainer = document.getElementById('onme-modal-result-container');
-        const stickerContainer = document.getElementById('onme-modal-sticker-container');
-        const scenesPanel = document.getElementById('onme-scenes-panel');
-        const stickersPanel = document.getElementById('onme-stickers-panel');
-        const framesPanel = document.getElementById('onme-frames-panel');
-        const downloadButton = document.getElementById('onme-modal-download-button');
-        
-        let personImageBase64 = null;
+                        <!-- Billing Section -->
+                        <div class="bg-white p-8 rounded-xl shadow-md">
+                             <h2 class="text-2xl font-semibold text-gray-800 mb-6">Manage Your Subscription</h2>
+                             <div id="billing-error" class="text-red-500 text-sm mb-4"></div>
+                             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                 <!-- Core Plan -->
+                                 <div class="border border-gray-200 rounded-lg p-6 flex flex-col">
+                                     <h3 class="text-xl font-semibold">OnMe Core</h3>
+                                     <p class="text-gray-500 mt-2">The essential virtual try-on experience.</p>
+                                     <p class="text-4xl font-bold my-4">$19<span class="text-base font-medium text-gray-500">/mo</span></p>
+                                     <ul class="space-y-2 text-gray-600 mb-6 flex-grow">
+                                         <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Basic Try-On Widget</li>
+                                         <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Up to 1,000 try-ons/mo</li>
+                                     </ul>
+                                     <button data-price-id="price_1PuaTTRs1d9g4j5k9f9f9f9f" class="upgrade-button w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors">Select Core Plan</button>
+                                 </div>
+                                 <!-- Vibe Plan -->
+                                 <div class="border-2 border-indigo-500 rounded-lg p-6 flex flex-col relative">
+                                     <div class="absolute top-0 -translate-y-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</div>
+                                     <h3 class="text-xl font-semibold">OnMe Vibe</h3>
+                                     <p class="text-gray-500 mt-2">Drive engagement with our UGC engine.</p>
+                                     <p class="text-4xl font-bold my-4">$49<span class="text-base font-medium text-gray-500">/mo</span></p>
+                                     <ul class="space-y-2 text-gray-600 mb-6 flex-grow">
+                                         <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Everything in Core, plus:</li>
+                                         <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>The Vibe Studio</li>
+                                         <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited try-ons</li>
+                                     </ul>
+                                     <button data-price-id="price_1PuaUuRs1d9g4j5k9f9f9f9f" class="upgrade-button w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 transition-colors">Upgrade to Vibe</button>
+                                 </div>
+                             </div>
+                        </div>
 
-        // --- Utility Functions ---
-        const fileToBase64 = file => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = error => reject(error);
-        });
+                    </div>
+                </main>
+            </div>
+        </div>
 
-        const urlToBase64 = async (url) => {
-            try {
-                // Use a CORS proxy to prevent tainted canvas errors
-                const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
-                const response = await fetch(proxyUrl);
-                const blob = await response.blob();
-                return await fileToBase64(blob);
-            } catch (error) {
-                console.error("Image fetch error:", error);
-                throw new Error("Could not fetch product image.");
-            }
-        };
+    </div>
 
-        const updateUIState = (isLoading = false, message = '', resultImageUrl = null) => {
-            loadingSpinner.classList.toggle('hidden', !isLoading);
-            generateButton.classList.toggle('hidden', isLoading);
-            generateButton.disabled = isLoading;
-            messageEl.textContent = message;
-            if (resultImageUrl) {
-                modalResultImage.src = resultImageUrl;
-                vibeStudioButton.classList.remove('hidden');
-            } else {
-                vibeStudioButton.classList.add('hidden');
-            }
-        };
+    <script type="module">
+        // --- IMPORTANT: Replace with your Supabase project details ---
+        const SUPABASE_URL = 'https://dhubrstfaothjnsdxwmo.supabase.co'; // Your Supabase URL
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIJWTJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodWJyc3RmYW90aGpuc2R4d21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NTk5NjUsImV4cCI6MjA3MjAzNTk2NX0.46PoeHfIDixWgtWWr0xV33ItXnYNemcXyH_iFPBNEj8'; // Your Supabase Anon Key
 
-        // --- Event Handlers ---
-        async function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            personPreview.src = URL.createObjectURL(file);
-            uploadLabel.textContent = 'Change Photo';
-            generateButton.disabled = false;
-            personImageBase64 = await fileToBase64(file);
-            sessionStorage.setItem(SESSION_STORAGE_KEY, personImageBase64);
-        }
+        const appContainer = document.getElementById('app-container');
 
-        async function handleGeneration() {
-            if (!personImageBase64) {
-                updateUIState(false, 'Please upload your photo first.');
-                return;
-            }
-            const productImageEl = document.getElementById(PRODUCT_IMAGE_ID);
-            if (!productImageEl) {
-                updateUIState(false, `Error: Product image with id #${PRODUCT_IMAGE_ID} not found.`);
-                return;
-            }
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            appContainer.innerHTML = `
+                <div class="min-h-screen flex items-center justify-center">
+                    <div class="max-w-md w-full bg-white p-8 rounded-xl shadow-md text-center">
+                        <h2 class="text-2xl font-bold text-red-600 mb-4">Configuration Required</h2>
+                        <p class="text-gray-700">
+                            Please open the <code>client_dashboard.html</code> file and add your Supabase URL and Anon Key to the script section to activate this dashboard.
+                        </p>
+                    </div>
+                </div>`;
+        } else {
+            const { createClient } = supabase;
+            const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-            updateUIState(true, 'Generating your try-on...');
+            // --- Element References ---
+            const loginView = document.getElementById('login-view');
+            const signupView = document.getElementById('signup-view');
+            const dashboardView = document.getElementById('dashboard-view');
+            const loginForm = document.getElementById('login-form');
+            const signupForm = document.getElementById('signup-form');
+            const logoutButton = document.getElementById('logout-button');
+            const showSignupLink = document.getElementById('show-signup');
+            const showLoginLink = document.getElementById('show-login');
+            const loginError = document.getElementById('login-error');
+            const signupError = document.getElementById('signup-error');
+            const billingError = document.getElementById('billing-error');
             
-            try {
-                const clothingImageBase64 = await urlToBase64(productImageEl.src);
-                const prompt = `Take the person from the first image and put the clothing item from the second image on them. The person should be wearing the clothes. Ensure the final generated image of the person has a transparent background (alpha channel), making it a clean cutout. The person's original background should be completely removed.`;
-                const payload = {
-                    contents: [{
-                        parts: [
-                            { text: prompt },
-                            { inlineData: { mimeType: "image/jpeg", data: personImageBase64 } },
-                            { inlineData: { mimeType: "image/jpeg", data: clothingImageBase64 } }
-                        ]
-                    }],
-                    generationConfig: { responseMimeType: 'application/json' },
-                };
+            // --- View Management ---
+            const showView = (viewId) => {
+                loginView.classList.add('hidden');
+                signupView.classList.add('hidden');
+                dashboardView.classList.add('hidden');
+                document.getElementById(viewId).classList.remove('hidden');
+            };
 
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+            // --- Authentication Logic ---
+            async function handleSignUp(event) {
+                event.preventDefault();
+                const company = document.getElementById('signup-company').value;
+                const email = document.getElementById('signup-email').value;
+                const password = document.getElementById('signup-password').value;
+                signupError.textContent = '';
+                const { data, error } = await dbClient.auth.signUp({ email, password });
+                if (error) {
+                    signupError.textContent = error.message;
+                } else if (data.user) {
+                    const { error: profileError } = await dbClient
+                        .from('clients')
+                        .insert([{ id: data.user.id, company_name: company }]);
+                    if (profileError) {
+                         signupError.textContent = `Account created, but failed to create profile: ${profileError.message}`;
+                    } else {
+                        alert('Sign up successful! Please check your email for a confirmation link.');
+                        showView('login-view');
+                    }
+                }
+            }
+
+            async function handleSignIn(event) {
+                event.preventDefault();
+                const email = document.getElementById('login-email').value;
+                const password = document.getElementById('login-password').value;
+                loginError.textContent = '';
+                const { error } = await dbClient.auth.signInWithPassword({ email, password });
+                if (error) { loginError.textContent = error.message; }
+            }
+
+            async function handleSignOut() {
+                await dbClient.auth.signOut();
+            }
+
+            async function loadDashboardData(userId, userPlan) {
+                 const { data, error } = await dbClient
+                    .from('clients')
+                    .select('client_id, plan')
+                    .eq('id', userId)
+                    .single();
+                if (error) { console.error('Error fetching client data:', error); return; }
+
+                const plan = data.plan.charAt(0).toUpperCase() + data.plan.slice(1);
+                document.getElementById('current-plan').textContent = plan;
+                document.getElementById('client-id-display').textContent = data.client_id;
+                document.getElementById('widget-script-tag').textContent = `<script src="https://cdn.onme.fit/widget.js" data-client-id="${data.client_id}" defer><\/script>`;
+
+                // Update billing buttons based on current plan
+                document.querySelectorAll('.upgrade-button').forEach(button => {
+                    const buttonPlan = button.dataset.priceId.includes('Core') ? 'Core' : 'Vibe'; // This is a simplification. Use actual Price IDs.
+                    if (plan.toLowerCase() === buttonPlan.toLowerCase()) {
+                        button.textContent = 'Current Plan';
+                        button.disabled = true;
+                        button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                        button.classList.add('bg-gray-400', 'cursor-not-allowed');
+                    }
                 });
 
-                if (!response.ok) throw new Error(`API Error (${response.status})`);
-                
-                const result = await response.json();
-                const candidate = result?.candidates?.[0];
-                const base64Data = candidate?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-
-                if (!base64Data) throw new Error('No image data in API response.');
-                
-                const imageUrl = `data:image/png;base64,${base64Data}`;
-                updateUIState(false, 'Generation complete!', imageUrl);
-                
-                // Log the successful event
-                await logTryOnEvent();
-
-            } catch (error) {
-                console.error("API Error:", error);
-                updateUIState(false, `Error: ${error.message}`);
-            }
-        }
-        
-        function handleStickerDrag(e) {
-            const sticker = e.target;
-            sticker.classList.add('dragging');
-            let offsetX = e.clientX - sticker.getBoundingClientRect().left;
-            let offsetY = e.clientY - sticker.getBoundingClientRect().top;
-
-            function moveAt(pageX, pageY) {
-                sticker.style.left = pageX - sticker.parentElement.getBoundingClientRect().left - offsetX + 'px';
-                sticker.style.top = pageY - sticker.parentElement.getBoundingClientRect().top - offsetY + 'px';
+                const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                const { count, error: countError } = await dbClient
+                    .from('try_on_events')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('client_id', data.client_id)
+                    .gte('created_at', thirtyDaysAgo);
+                document.getElementById('monthly-tryons').textContent = countError ? 'Error' : count;
             }
 
-            function onMouseMove(event) {
-                moveAt(event.pageX, event.pageY);
-            }
-            
-            document.addEventListener('mousemove', onMouseMove);
-            
-            sticker.onmouseup = function() {
-                document.removeEventListener('mousemove', onMouseMove);
-                sticker.onmouseup = null;
-                sticker.classList.remove('dragging');
-            };
-            sticker.ondragstart = () => false;
-        }
+            // --- Billing Logic ---
+            async function handleUpgradeClick(event) {
+                const priceId = event.target.dataset.priceId;
+                billingError.textContent = '';
+                event.target.textContent = 'Redirecting...';
+                event.target.disabled = true;
 
-        // --- Initialization ---
-        function loadSessionPhoto() {
-            const savedPhoto = sessionStorage.getItem(SESSION_STORAGE_KEY);
-            if (savedPhoto) {
-                personImageBase64 = savedPhoto;
-                personPreview.src = `data:image/jpeg;base64,${savedPhoto}`;
-                uploadLabel.textContent = 'Change Photo';
-                generateButton.disabled = false;
-            }
-        }
+                try {
+                    const { data: { session } } = await dbClient.auth.getSession();
+                    if (!session) throw new Error("You must be logged in to upgrade.");
 
-        function setupVibeStudio() {
-            // Populate panels
-            scenesPanel.innerHTML = SCENES.map(url => `<img src="${url}" class="w-full h-16 object-cover rounded cursor-pointer hover:opacity-75">`).join('');
-            stickersPanel.innerHTML = STICKERS.map(url => `<img src="${url}" class="w-full h-12 object-contain p-1 rounded cursor-pointer hover:bg-gray-200">`).join('');
-            framesPanel.innerHTML = ['None', 'Polaroid', 'Neon', 'Film'].map(name => `<div class="text-center p-2 border-2 rounded cursor-pointer hover:bg-gray-100">${name}</div>`).join('');
-            
-            // Event Listeners
-            vibeStudioButton.onclick = () => modal.classList.add('flex');
-            closeModalButton.onclick = () => modal.classList.remove('flex');
-            modal.onclick = (e) => { if(e.target === modal) modal.classList.remove('flex'); };
-            
-            document.querySelectorAll('.vibe-tab').forEach(tab => {
-                tab.onclick = () => {
-                    document.querySelectorAll('.vibe-tab').forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.vibe-panel').forEach(p => p.classList.add('hidden'));
-                    tab.classList.add('active');
-                    document.getElementById(`onme-${tab.dataset.tab}-panel`).classList.remove('hidden');
-                };
+                    const { data, error } = await dbClient.functions.invoke('create-checkout-session', {
+                        body: { priceId },
+                    });
+
+                    if (error) throw error;
+                    if (data.url) {
+                        window.location.href = data.url;
+                    } else {
+                        throw new Error("Could not create a checkout session.");
+                    }
+                } catch (error) {
+                    billingError.textContent = error.message;
+                    event.target.textContent = 'Upgrade';
+                    event.target.disabled = false;
+                }
+            }
+
+            // --- Main App Logic ---
+            dbClient.auth.onAuthStateChange((event, session) => {
+                if (session) {
+                    document.getElementById('user-email').textContent = session.user.email;
+                    showView('dashboard-view');
+                    loadDashboardData(session.user.id);
+                } else {
+                    showView('login-view');
+                }
             });
             
-            scenesPanel.onclick = (e) => {
-                if (e.target.tagName === 'IMG') modalResultContainer.style.backgroundImage = `url(${e.target.src})`;
-            };
-            
-            stickersPanel.onclick = (e) => {
-                if (e.target.tagName !== 'IMG') return;
-                const sticker = document.createElement('img');
-                sticker.src = e.target.src;
-                sticker.className = 'onme-sticker';
-                sticker.style.left = '50%';
-                sticker.style.top = '50%';
-                stickerContainer.appendChild(sticker);
-                sticker.onmousedown = handleStickerDrag;
-            };
-
-            framesPanel.onclick = (e) => {
-                modalResultContainer.className = modalResultContainer.className.replace(/onme-frame-\w+/g, '');
-                const frameName = e.target.innerText.toLowerCase();
-                if (frameName !== 'none') modalResultContainer.classList.add(`onme-frame-${frameName}`);
-            };
-
-            downloadButton.onclick = () => {
-                html2canvas(modalResultContainer, { allowTaint: true, useCORS: true }).then(canvas => {
-                    const link = document.createElement('a');
-                    link.download = 'onme-vibe.png';
-                    link.href = canvas.toDataURL();
-                    link.click();
-                });
-            };
+            // --- Event Listeners ---
+            loginForm.addEventListener('submit', handleSignIn);
+            signupForm.addEventListener('submit', handleSignUp);
+            logoutButton.addEventListener('click', handleSignOut);
+            showSignupLink.addEventListener('click', (e) => { e.preventDefault(); showView('signup-view'); });
+            showLoginLink.addEventListener('click', (e) => { e.preventDefault(); showView('login-view'); });
+            document.querySelectorAll('.upgrade-button').forEach(button => {
+                button.addEventListener('click', handleUpgradeClick);
+            });
         }
-
-        // --- Main Execution ---
-        personUpload.addEventListener('change', handleFileUpload);
-        generateButton.addEventListener('click', handleGeneration);
-        loadSessionPhoto();
-        setupVibeStudio();
-
-        console.log(`OnMe Widget Initialized.`);
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeWidget);
-    } else {
-        initializeWidget();
-    }
-})();
+    </script>
+</body>
+</html>
