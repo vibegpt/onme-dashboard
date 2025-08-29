@@ -164,7 +164,7 @@
     <script type="module">
         // --- IMPORTANT: Replace with your Supabase project details ---
         const SUPABASE_URL = 'https://dhubrstfaothjnsdxwmo.supabase.co'; // Your Supabase URL
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodWJyc3RmYW90aGpuc2R4d21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NTk5NjUsImV4cCI6MjA3MjAzNTk2NX0.46PoeHfIDixWgtWWr0xV33ItXnYNemcXyH_iFPBNEj8'; // PASTE YOUR SUPABASE ANON KEY HERE
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodWJyc3RmYW90aGpuc2R4d21vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NTk5NjUsImV4cCI6MjA3MjAzNTk2NX0.46PoeHfIDixWgtWWr0xV33ItXnYNemcXyH_iFPBNEj8'; // PASTE YOUR SUPABASE ANON KEY HERE
 
         const appContainer = document.getElementById('app-container');
 
@@ -286,22 +286,22 @@
                 button.disabled = true;
 
                 try {
-                    console.log('Invoking create-checkout-session function...');
+                    // --- THIS IS THE CRITICAL FIX ---
+                    // Explicitly get the user's session token to ensure authentication.
+                    const { data: { session }, error: sessionError } = await dbClient.auth.getSession();
+                    if (sessionError || !session) {
+                        throw new Error('Authentication error: Could not get user session.');
+                    }
+                    
                     const { data, error } = await dbClient.functions.invoke('create-checkout-session', {
+                        headers: {
+                            'Authorization': `Bearer ${session.access_token}`
+                        },
                         body: { priceId },
                     });
-                    
-                    console.log('Function response received:', { data, error });
 
-                    if (error) {
-                        throw new Error(`Function Error: ${error.message}`);
-                    }
-                    
-                    // The function might return a 200 OK but with an error message in the body
-                    if (data && data.error) {
-                        throw new Error(`Backend Error: ${data.error}`);
-                    }
-
+                    if (error) { throw new Error(`Function Error: ${error.message}`); }
+                    if (data && data.error) { throw new Error(`Backend Error: ${data.error}`); }
                     if (data && data.url) {
                         window.location.href = data.url;
                     } else {
