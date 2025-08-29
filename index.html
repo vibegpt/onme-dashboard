@@ -277,7 +277,7 @@
                 document.getElementById('monthly-tryons').textContent = countError ? 'Error' : count;
             }
 
-            // --- Billing Logic (FINAL, MOST ROBUST VERSION) ---
+            // --- Billing Logic (DEFINITIVE FIX) ---
             async function handleUpgradeClick(event) {
                 const priceId = event.target.dataset.priceId;
                 const button = event.target;
@@ -292,11 +292,14 @@
                     }
                     
                     const functionUrl = `${SUPABASE_URL}/functions/v1/create-checkout-session`;
+                    
+                    // Use a standard fetch call and manually include both required headers.
                     const response = await fetch(functionUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${session.access_token}`
+                            'Authorization': `Bearer ${session.access_token}`,
+                            'apiKey': SUPABASE_ANON_KEY 
                         },
                         body: JSON.stringify({ priceId: priceId })
                     });
@@ -346,3 +349,4 @@
     </script>
 </body>
 </html>
+
