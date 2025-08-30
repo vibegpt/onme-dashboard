@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OnMe Client Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;7E00&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
+        /* Add a subtle animation for the plan update */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .plan-updated { animation: fadeIn 0.5s ease-in-out; }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -181,6 +184,7 @@
         } else {
             const { createClient } = supabase;
             const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            let profileSubscription = null;
 
             // --- Element References ---
             const loginView = document.getElementById('login-view');
@@ -239,35 +243,69 @@
             }
 
             async function handleSignOut() {
+                if (profileSubscription) {
+                    dbClient.removeChannel(profileSubscription);
+                    profileSubscription = null;
+                }
                 await dbClient.auth.signOut();
             }
 
-            async function loadDashboardData(userId) {
-                 const { data, error } = await dbClient
-                    .from('clients')
-                    .select('client_id, plan')
-                    .eq('id', userId)
-                    .single();
-                if (error) { console.error('Error fetching client data:', error); return; }
-
+            // --- Data Loading and REALTIME SUBSCRIPTION ---
+            function updateDashboardUI(data) {
+                if (!data) return;
                 const plan = data.plan.charAt(0).toUpperCase() + data.plan.slice(1);
-                document.getElementById('current-plan').textContent = plan;
+                const currentPlanEl = document.getElementById('current-plan');
+                
+                if (currentPlanEl.textContent !== plan) {
+                    currentPlanEl.textContent = plan;
+                    currentPlanEl.classList.add('plan-updated');
+                    setTimeout(() => currentPlanEl.classList.remove('plan-updated'), 500);
+                }
+
                 document.getElementById('client-id-display').textContent = data.client_id;
                 document.getElementById('widget-script-tag').textContent = `<script src="https://cdn.onme.fit/widget.js" data-client-id="${data.client_id}" defer><\/script>`;
 
                 document.querySelectorAll('.upgrade-button').forEach(button => {
+                    button.disabled = false;
+                    button.textContent = button.dataset.priceId.includes('1S1RlK') ? 'Select Core Plan' : 'Upgrade to Vibe';
+                    button.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                    button.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+
                     const priceId = button.dataset.priceId;
                     const isCurrentPlan = 
-                        (plan.toLowerCase() === 'core' && priceId === "YOUR_CORE_PLAN_PRICE_ID_HERE") ||
-                        (plan.toLowerCase() === 'vibe' && priceId === "YOUR_VIBE_PLAN_PRICE_ID_HERE");
+                        (plan.toLowerCase() === 'core' && priceId === "price_1S1RlKK6RYPzzH0pxrbu3fXI") ||
+                        (plan.toLowerCase() === 'vibe' && priceId === "price_1S1RljK6RYPzzH0phFn0D3ON");
 
                     if (isCurrentPlan) {
                         button.textContent = 'Current Plan';
                         button.disabled = true;
-                        button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700', 'bg-gray-600', 'hover:bg-gray-700');
+                        button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
                         button.classList.add('bg-gray-400', 'cursor-not-allowed');
                     }
                 });
+            }
+
+            async function setupRealtimeSubscription(userId) {
+                // Unsubscribe from any previous channels
+                if (profileSubscription) {
+                    dbClient.removeChannel(profileSubscription);
+                }
+
+                profileSubscription = dbClient.channel(`public:clients:id=eq.${userId}`)
+                    .on(
+                        'postgres_changes',
+                        { event: '*', schema: 'public', table: 'clients', filter: `id=eq.${userId}` },
+                        (payload) => {
+                            console.log('Realtime update received!', payload.new);
+                            updateDashboardUI(payload.new);
+                        }
+                    )
+                    .subscribe();
+
+                // Initial data load
+                const { data, error } = await dbClient.from('clients').select('client_id, plan').eq('id', userId).single();
+                if (error) { console.error('Error fetching initial client data:', error); return; }
+                updateDashboardUI(data);
 
                 const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
                 const { count, error: countError } = await dbClient
@@ -319,18 +357,17 @@
                 } catch (error) {
                     console.error('Upgrade failed:', error);
                     billingError.textContent = error.message;
-                    button.textContent = 'Upgrade to Vibe'; // Reset button text
+                    button.textContent = 'Upgrade to Vibe';
                     button.disabled = false;
                 }
             }
-
 
             // --- Main App Logic ---
             dbClient.auth.onAuthStateChange((event, session) => {
                 if (session) {
                     document.getElementById('user-email').textContent = session.user.email;
                     showView('dashboard-view');
-                    loadDashboardData(session.user.id);
+                    setupRealtimeSubscription(session.user.id);
                 } else {
                     showView('login-view');
                 }
