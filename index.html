@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OnMe Client Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;7E00&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -136,7 +136,7 @@
                                          <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Basic Try-On Widget</li>
                                          <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Up to 1,000 try-ons/mo</li>
                                      </ul>
-                                     <button data-price-id="price_1PuaTTRs1d9g4j5k9f9f9f9f" class="upgrade-button w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors">Select Core Plan</button>
+                                     <button data-price-id="price_1S1RlKK6RYPzzH0pxrbu3fXI" class="upgrade-button w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors">Select Core Plan</button>
                                  </div>
                                  <!-- Vibe Plan -->
                                  <div class="border-2 border-indigo-500 rounded-lg p-6 flex flex-col relative">
@@ -149,7 +149,7 @@
                                          <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>The Vibe Studio</li>
                                          <li class="flex items-center"><svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited try-ons</li>
                                      </ul>
-                                     <button data-price-id="price_1PuaUuRs1d9g4j5k9f9f9f9f" class="upgrade-button w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 transition-colors">Upgrade to Vibe</button>
+                                     <button data-price-id="price_1S1RljK6RYPzzH0phFn0D3ON" class="upgrade-button w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 transition-colors">Upgrade to Vibe</button>
                                  </div>
                              </div>
                         </div>
@@ -256,11 +256,12 @@
                 document.getElementById('widget-script-tag').textContent = `<script src="https://cdn.onme.fit/widget.js" data-client-id="${data.client_id}" defer><\/script>`;
 
                 document.querySelectorAll('.upgrade-button').forEach(button => {
-                    const buttonPriceId = button.dataset.priceId;
-                    const isCoreButton = buttonPriceId === 'price_1PuaTTRs1d9g4j5k9f9f9f9f'; // Replace with your Core Price ID
-                    const isVibeButton = buttonPriceId === 'price_1PuaUuRs1d9g4j5k9f9f9f9f'; // Replace with your Vibe Price ID
+                    const priceId = button.dataset.priceId;
+                    const isCurrentPlan = 
+                        (plan.toLowerCase() === 'core' && priceId === "YOUR_CORE_PLAN_PRICE_ID_HERE") ||
+                        (plan.toLowerCase() === 'vibe' && priceId === "YOUR_VIBE_PLAN_PRICE_ID_HERE");
 
-                    if ((plan.toLowerCase() === 'core' && isCoreButton) || (plan.toLowerCase() === 'vibe' && isVibeButton)) {
+                    if (isCurrentPlan) {
                         button.textContent = 'Current Plan';
                         button.disabled = true;
                         button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700', 'bg-gray-600', 'hover:bg-gray-700');
@@ -277,7 +278,7 @@
                 document.getElementById('monthly-tryons').textContent = countError ? 'Error' : count;
             }
 
-            // --- Billing Logic (DEFINITIVE FIX with Diagnostic Logging) ---
+            // --- Billing Logic ---
             async function handleUpgradeClick(event) {
                 const priceId = event.target.dataset.priceId;
                 const button = event.target;
@@ -291,30 +292,21 @@
                         throw new Error('Authentication error. Please log out and log back in.');
                     }
                     
-                    // --- DIAGNOSTIC LOGS ---
-                    console.log("SESSION OBJECT:", session);
-                    console.log("ACCESS TOKEN:", session.access_token);
-                    
                     const functionUrl = `${SUPABASE_URL}/functions/v1/create-checkout-session`;
                     
-                    const headersToSend = {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
-                        'apiKey': SUPABASE_ANON_KEY 
-                    };
-
-                    console.log("SENDING HEADERS:", headersToSend);
-
                     const response = await fetch(functionUrl, {
                         method: 'POST',
-                        headers: headersToSend,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`,
+                            'apiKey': SUPABASE_ANON_KEY 
+                        },
                         body: JSON.stringify({ priceId: priceId })
                     });
                     
                     const responseData = await response.json();
 
                     if (!response.ok) {
-                        console.error("RAW ERROR RESPONSE:", responseData);
                         throw new Error(responseData.error || 'Failed to create checkout session.');
                     }
 
